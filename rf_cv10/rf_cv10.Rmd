@@ -1,0 +1,274 @@
+---
+title: "RF CV10"
+author: "Jiaying Wang"
+date: '2022-11-07'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Library
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(missForest)
+library(doParallel)
+library(randomForest)
+library('fastDummies')
+library(neuralnet)
+library(keras)
+load("../../data/temp/remData.Rdata")
+
+r2_calc <- function(classifications, predictions){
+  
+  idx <- !is.na(predictions) & !is.na(classifications)
+  classifications <- classifications[idx]
+  predictions <- predictions[idx]
+  
+  1 - (sum((classifications-predictions)^2)/sum((classifications-mean(classifications))^2))
+  
+}
+
+print_dot_callback <- callback_lambda(
+  on_epoch_end = function(epoch, logs) {
+    if (epoch %% 80 == 0) cat("\n")
+    cat(".")
+  }
+)  
+
+```
+
+## Data Prepare
+
+```{r}
+df = taksRem %>% select(-contains("_na"))
+
+df2 = inner_join(df, grdXwalk, by = 'CAMPUS')
+df2 = subset(df2,select = -c(COUNTY,GRDSPAN))
+check = df2 %>% pivot_longer(cols = -c(CAMPUS,GRDTYPE), names_to = c("type","variable"),names_pattern = "(.+)([A-Z]\\d{2})",values_to = "value")
+
+check = check %>% pivot_wider(names_from = type,values_from = value)
+
+check2 = check %>% mutate(out = case_when(GRDTYPE %in% c("S", "B") & !is.na(outh) ~ outh,
+                                          GRDTYPE %in% c("M", "E") ~ outm,
+                                          GRDTYPE %in% c("S", "B") & is.na(outh) ~ outm))
+
+tf = covsRem_noscale %>% select(CAMPUS,matches("_34$"))
+ff = covsRem_noscale %>% select(CAMPUS,matches("_45$"))
+fs = covsRem_noscale %>% select(CAMPUS,matches("_56$"))
+ss = covsRem_noscale %>% select(CAMPUS,matches("_67$"))
+se = covsRem_noscale %>% select(CAMPUS,matches("_78$"))
+
+name_34 = tf[c(which(rowSums(is.na(tf)) == ncol(tf)-1)),1] # campus name whose column entries are all na == campus not existent in 34
+name_45 = ff[c(which(rowSums(is.na(ff)) == ncol(ff)-1)),1]
+name_56 = fs[c(which(rowSums(is.na(fs)) == ncol(fs)-1)),1]
+name_67 = ss[c(which(rowSums(is.na(ss)) == ncol(ss)-1)),1]
+name_78 = se[c(which(rowSums(is.na(se)) == ncol(se)-1)),1]
+```
+
+
+
+
+## Cross-Validation Function
+X is your matrix of covariates
+y is a vector of outcomes
+K is the number of folds
+
+#   Function
+```{r}
+# X = data_m[,3:33]
+# y = data_m[,2]
+
+
+cv_fun <- function(X, y, K=10){
+N <- nrow(X)
+folds <- cut(sample(N),breaks=K,labels=FALSE)
+
+cv.out <- foreach(k = 1:K, .combine=rbind) %do% {
+
+rf <- randomForest(X[(folds != k),], y[(folds != k)],importance = TRUE)
+imp = sort(rf$importance[,1]/sum(rf$importance[,1]),decreasing = T)[1:20]
+
+train_cov = X[(folds != k),c(names(imp))] 
+train_target = y[(folds != k)]
+test_cov = X[(folds == k),c(names(imp))]
+test_target = y[(folds == k)]
+
+covs <- array(data = as.matrix(train_cov), dim = c(nrow(train_cov),1,ncol(train_cov)))
+response <- array(data = as.matrix(train_target), dim = c(nrow(train_cov), 1))
+covs_test = array(data = as.matrix(test_cov), dim = c(nrow(test_cov),1,ncol(test_cov)))
+response_test = array(data = as.matrix(test_target), dim = c(nrow(test_cov), 1))
+
+    
+input_layer <- layer_input(shape = c(1,ncol(train_cov)))
+output_layer <- input_layer %>%
+    layer_masking(mask_value = 0) %>%
+    layer_dropout(rate = .5) %>%
+    layer_lstm(units = 64, return_sequences = F, dropout = .5, recurrent_dropout = .5) %>%
+    layer_dropout(rate = .5) %>%
+    layer_dense(units = 1, activation = "linear")
+
+model <- keras_model(input_layer, output_layer)
+model %>% compile(
+    loss = "mse",
+    #metrics = "accuracy",
+    optimizer = optimizer_adam()
+)
+    
+
+history <- model %>% fit(
+      x = covs,
+      y = response,
+      epochs = 200,
+      validation_split = 0.25,
+      verbose = 0,
+      callbacks = list(print_dot_callback)
+    )
+
+pred <- model %>% predict(x = covs_test)
+error_metric <- mean((pred[,1] - response_test)^2)
+r2_metric <- r2_calc(response_test,pred[,1])
+it.ob <- c(error_metric, r2_metric)
+names(it.ob) <- c("mse","r2")
+  
+it.ob
+
+# error_metric[k] <- mean((pred[,1] - response_test)^2) # 
+# r2_metric[k] = r2_calc(response_test,pred[,1]) #
+}
+
+return(cv.out)
+
+
+}
+
+#result =cv_fun(X,y,2)
+
+
+# result
+# cv_error = mean(result[,1])
+# r2 = mean(result[,2])
+
+
+
+```
+
+
+
+
+
+## Middle School Data Prepare (replace NA with 0)
+
+```{r}
+data_m = check2 %>% filter((!is.na(outm))&(is.na(outh)))
+data_m = inner_join(data_m, covsRem_noscale, by = 'CAMPUS')
+data_m = data_m %>% filter(variable == "A08")
+data_m = merge(data_m, grdXwalk)
+data_m = dummy_cols(data_m, select_columns = 'GRDSPAN') # 41 levels under GRDSPAN without na in outm
+data_m = subset(data_m,select = -c(GRDTYPE,Type,variable,outm,outh,GRDSPAN,COUNTY)) # dont need to change out to outm becuz
+# out is outm, without na as programmed
+
+#start from 3 becuz unlike b4, this time out does not have na
+for (i in 3:5145){
+  col = ifelse(is.na(data_m[i]), 1, 0)
+  data_m[paste0("col",i)] = col
+  #df$col2 <- ifelse(is.na(df[2]), 1, 0) # 1 = is NA 
+}
+
+data_m$exist34 = ifelse(data_m$CAMPUS %in% name_34,1,0)
+data_m$exist45 = ifelse(data_m$CAMPUS %in% name_45,1,0)
+data_m$exist56 = ifelse(data_m$CAMPUS %in% name_56,1,0)
+data_m$exist67 = ifelse(data_m$CAMPUS %in% name_67,1,0)
+data_m$exist78 = ifelse(data_m$CAMPUS %in% name_78,1,0)
+
+names(data_m) <- make.names(names(data_m))
+data_m[,3:5145] = scale(data_m[,3:5145])
+# replace na with 0
+data_m[is.na(data_m)] <- 0 # 1394*10321
+```
+
+## Middle Run CV (Replace NA with 0)
+```{r}
+X = data_m[,3:ncol(data_m)]
+y = data_m[,2]
+
+start_time <- Sys.time()
+# 
+middle_zero = cv_fun(X,y,K = 10)
+
+end_time <- Sys.time()
+end_time - start_time
+
+save(middle_zero,file = 'cv_middle_0.Rdata')
+
+load('cv_middle_0.Rdata')
+```
+
+
+```{r}
+middle_zero
+cv_error = mean(middle_zero[,1])
+r2 = mean(middle_zero[,2])
+
+
+```
+[[1]]
+[1] 55.92771
+
+[[2]]
+[1] 0.6690048
+
+[[3]]
+[1] 2.210215
+
+
+
+
+
+
+
+```{r}
+for (i in rownames(df[[2]])){
+  
+  if (i %in% imp_varlis == F){
+    imp_varlis = append(imp_varlis,i)
+  }
+}
+
+
+#k1 = rownames(df[[1]])
+#k1$rank = seq.int(nrow(k1))
+
+
+```
+
+
+```{r}
+var_imprank = imp_varlis[[1]]
+for (i in 2:10){
+  var_imprank = full_join(var_imprank,imp_varlis[[i]])
+  
+}
+var_imprank
+```
+
+
+```{r}
+temp = var_imprank 
+
+temp <- temp %>% mutate(avg_rank = rowSums(select(., contains("rank")),na.rm=TRUE)/(ncol(temp)-1))
+temp
+```
+
+
+
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
