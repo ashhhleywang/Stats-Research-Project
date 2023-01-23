@@ -48,6 +48,6 @@
 
 echo "Running from $(pwd)"
 
-R CMD BATCH --no-restore --no-save --quiet greatlake.R Rbatch.out
+R CMD BATCH --no-restore --no-save --quiet case2.R Rbatch.out
 
 ##  If you copied any files to /tmp, make sure you delete them here!
