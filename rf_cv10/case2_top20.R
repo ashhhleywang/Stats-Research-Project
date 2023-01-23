@@ -363,10 +363,6 @@ high_df[,5175:10317] = scale(high_df[,5175:10317]) #scaling returns na for zero 
 high_df[is.na(high_df)] <- 0
 names(high_df) <- make.names(names(high_df))
 
-# high_df <- as.matrix(high_df)
-# dimnames(high_df) <- NULL
-# high_df = matrix(as.numeric(high_df),ncol = ncol(high_df)) # 1474*10322
-
 
 
 X =high_df[,3:ncol(high_df)] # 1474 * 10320
