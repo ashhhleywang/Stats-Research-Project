@@ -49,6 +49,8 @@ name_56 = fs[c(which(rowSums(is.na(fs)) == ncol(fs)-1)),1]
 name_67 = ss[c(which(rowSums(is.na(ss)) == ncol(ss)-1)),1]
 name_78 = se[c(which(rowSums(is.na(se)) == ncol(se)-1)),1]
 
+
+
 cv_fun <- function(X, y, K=10){
   N <- nrow(X)
   folds <- cut(sample(N),breaks=K,labels=FALSE)
@@ -57,6 +59,13 @@ cv_fun <- function(X, y, K=10){
     
     rf <- randomForest(X[(folds != k),], y[(folds != k)],importance = TRUE)
     imp = sort(rf$importance[,1]/sum(rf$importance[,1]),decreasing = T)[1:20]
+    
+    rf_mod = randomForest(X[(folds != k),c(names(imp))], y[(folds != k)],importance = TRUE)
+    
+    rf_preds <- predict(rf_mod, newdata=X[(folds == k),c(names(imp))])
+    rf_mse <- mean((rf_preds-y[(folds == k)])^2) 
+    rf_r2 <- r2_calc(y[(folds == k)],rf_preds) 
+    
     
     train_cov = X[(folds != k),c(names(imp))] 
     train_target = y[(folds != k)]
@@ -71,10 +80,11 @@ cv_fun <- function(X, y, K=10){
     
     input_layer <- layer_input(shape = c(1,ncol(train_cov)))
     output_layer <- input_layer %>%
-      layer_masking(mask_value = 0) %>%
-      layer_dropout(rate = .5) %>%
-      layer_lstm(units = 64, return_sequences = F, dropout = .5, recurrent_dropout = .5) %>%
-      layer_dropout(rate = .5) %>%
+      #layer_masking(mask_value = 0) %>%
+      #layer_dropout(rate = .5) %>%
+      #layer_lstm(units = 64, return_sequences = F, dropout = .5, recurrent_dropout = .5) %>%
+      layer_dense(units = 8, activation = "sigmoid") %>% 
+      #layer_dropout(rate = .5) %>%
       layer_dense(units = 1, activation = "linear")
     
     model <- keras_model(input_layer, output_layer)
@@ -97,8 +107,8 @@ cv_fun <- function(X, y, K=10){
     pred <- model %>% predict(x = covs_test)
     error_metric <- mean((pred[,1] - response_test)^2)
     r2_metric <- r2_calc(response_test,pred[,1])
-    it.ob <- c(error_metric, r2_metric)
-    names(it.ob) <- c("mse","r2")
+    it.ob <- c(error_metric, r2_metric,rf_mse,rf_r2)
+    names(it.ob) <- c("nn_mse","nn_r2","rf_mse","rf_r2")
     
     it.ob
     
@@ -110,31 +120,66 @@ cv_fun <- function(X, y, K=10){
 }
 
 ## middle: replace with 0 ----
-# data_m = check2 %>% filter((!is.na(outm))&(is.na(outh)))
-# data_m = inner_join(data_m, covsRem_noscale, by = 'CAMPUS')
-# data_m = data_m %>% filter(variable == "A08")
-# data_m = merge(data_m, grdXwalk)
-# data_m = dummy_cols(data_m, select_columns = 'GRDSPAN') # 41 levels under GRDSPAN without na in outm
-# data_m = subset(data_m,select = -c(GRDTYPE,Type,variable,outm,outh,GRDSPAN,COUNTY)) # dont need to change out to outm becuz
-# # out is outm, without na as programmed
-# 
-# #start from 3 becuz unlike b4, this time out does not have na
+data_m = check2 %>% filter((!is.na(outm))&(is.na(outh)))
+data_m = inner_join(data_m, covsRem_noscale, by = 'CAMPUS')
+data_m = data_m %>% filter(variable == "A08")
+data_m = merge(data_m, grdXwalk)
+data_m = dummy_cols(data_m, select_columns = 'GRDSPAN') # 41 levels under GRDSPAN without na in outm
+data_m = subset(data_m,select = -c(GRDTYPE,Type,variable,outm,outh,GRDSPAN,COUNTY)) # dont need to change out to outm becuz
+# out is outm, without na as programmed
+
+data_m$exist34 = ifelse(data_m$CAMPUS %in% name_34,1,0)
+data_m$exist45 = ifelse(data_m$CAMPUS %in% name_45,1,0)
+data_m$exist56 = ifelse(data_m$CAMPUS %in% name_56,1,0)
+data_m$exist67 = ifelse(data_m$CAMPUS %in% name_67,1,0)
+data_m$exist78 = ifelse(data_m$CAMPUS %in% name_78,1,0)
+
+data_m <- data_m %>%
+  mutate(across(everything(), ~ifelse(is.na(.x), 1, 0), .names="mis_{.col}"))
+
+
+#start from 3 becuz unlike b4, this time out does not have na
 # for (i in 3:5145){
 #   col = ifelse(is.na(data_m[i]), 1, 0)
 #   data_m[paste0("col",i)] = col
 #   #df$col2 <- ifelse(is.na(df[2]), 1, 0) # 1 = is NA
 # }
+
+
+
 # 
-# data_m$exist34 = ifelse(data_m$CAMPUS %in% name_34,1,0)
-# data_m$exist45 = ifelse(data_m$CAMPUS %in% name_45,1,0)
-# data_m$exist56 = ifelse(data_m$CAMPUS %in% name_56,1,0)
-# data_m$exist67 = ifelse(data_m$CAMPUS %in% name_67,1,0)
-# data_m$exist78 = ifelse(data_m$CAMPUS %in% name_78,1,0)
+names(data_m) <- make.names(names(data_m))
+data_m[,3:5145] = scale(data_m[,3:5145])
+# replace na with 0
+data_m[is.na(data_m)] <- 0 # 1394*10321
+
+# data_m[1:5,1:5]
+# data_m[1:5,5170:5180]
+# data_m[1:5,9999:10000]
+# duplicated_columns <- duplicated(as.list(select(data_m,starts_with('col'))))
+# colnames(data_m[duplicated_columns])
+# data_m_uniq = data_m[!duplicated_columns]
+
+# data_m_uniq <- data_m[!duplicated(as.list(data_m))]
 # 
-# names(data_m) <- make.names(names(data_m))
-# data_m[,3:5145] = scale(data_m[,3:5145])
-# # replace na with 0
-# data_m[is.na(data_m)] <- 0 # 1394*10321
+# missing_cols[1:2,1:5]
+# check[1:5]
+
+missing_cols <- data_m %>%
+  select(starts_with('mis'))
+missing_colst <- t(missing_cols)
+missing_colst <- data.frame(missing_colst) 
+
+check <- missing_colst %>%
+  distinct()
+
+col_to_select = rownames(check)
+mis_col= data_m %>% select(col_to_select)
+d = cbind(data_m[,1:5178],mis_col)
+
+
+
+
 # 
 # 
 # 
