@@ -5,8 +5,16 @@
 .Rapp.history
 
 # Session Data files
+
 /*.Rdata
 data/*
+
+# intermediate data
+*.Rdata
+
+# images/pdf
+*.pdf
+*.HEIC
 
 # User-specific files
 .Ruserdata
