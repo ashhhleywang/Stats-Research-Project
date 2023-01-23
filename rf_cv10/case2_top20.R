@@ -112,8 +112,7 @@ cv_fun <- function(X, y, K=10){
     
     it.ob
     
-    # error_metric[k] <- mean((pred[,1] - response_test)^2) # 
-    # r2_metric[k] = r2_calc(response_test,pred[,1]) #
+ 
   }
   
   return(cv.out)
@@ -138,13 +137,6 @@ data_m <- data_m %>%
   mutate(across(everything(), ~ifelse(is.na(.x), 1, 0), .names="mis_{.col}"))
 
 
-#start from 3 becuz unlike b4, this time out does not have na
-# for (i in 3:5145){
-#   col = ifelse(is.na(data_m[i]), 1, 0)
-#   data_m[paste0("col",i)] = col
-#   #df$col2 <- ifelse(is.na(df[2]), 1, 0) # 1 = is NA
-# }
-
 
 
 # 
@@ -153,17 +145,7 @@ data_m[,3:5145] = scale(data_m[,3:5145])
 # replace na with 0
 data_m[is.na(data_m)] <- 0 # 1394*10321
 
-# data_m[1:5,1:5]
-# data_m[1:5,5170:5180]
-# data_m[1:5,9999:10000]
-# duplicated_columns <- duplicated(as.list(select(data_m,starts_with('col'))))
-# colnames(data_m[duplicated_columns])
-# data_m_uniq = data_m[!duplicated_columns]
 
-# data_m_uniq <- data_m[!duplicated(as.list(data_m))]
-# 
-# missing_cols[1:2,1:5]
-# check[1:5]
 
 missing_cols <- data_m %>%
   select(starts_with('mis'))
@@ -180,33 +162,30 @@ d = cbind(data_m[,1:5178],mis_col)
 
 
 
-# 
-# 
-# 
-# 
-# X = data_m[,3:ncol(data_m)]
-# y = data_m[,2]
-# 
-# X[0:5,0:5]
-# 
-# 
-# start_time <- Sys.time()
-# #
-# middle_zero = cv_fun(X,y,K = 10)
-# 
-# end_time <- Sys.time()
-# end_time - start_time
-# 
-# save(middle_zero,file = 'cv_middle_0.Rdata')
-# 
-# load('cv_middle_0.Rdata')
-# 
-# middle_zero
-# cv_error = mean(middle_zero[,1])
-# r2 = mean(middle_zero[,2])
 
-mean(middle_zero[,1])
-mean(middle_zero[,2])
+
+
+
+X = data_m[,3:ncol(data_m)]
+y = data_m[,2]
+
+
+
+
+start_time <- Sys.time()
+#
+middle_zero = cv_fun(X,y,K = 10)
+
+end_time <- Sys.time()
+end_time - start_time
+
+save(middle_zero,file = 'cv_middle_0.Rdata')
+
+load('cv_middle_0.Rdata')
+
+middle_zero
+cv_error = mean(middle_zero[,1])
+r2 = mean(middle_zero[,2])
 
 
 
