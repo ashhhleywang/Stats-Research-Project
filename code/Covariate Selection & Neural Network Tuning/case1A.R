@@ -6,7 +6,10 @@ library(randomForest)
 library('fastDummies')
 library(neuralnet)
 library(keras)
-load("../data/remData.Rdata")
+load("../../data/temp/remData.Rdata")
+
+#check3 = covsRem_noscale %>% select(starts_with('pre'))
+
 
 r2_calc <- function(classifications, predictions){
   
@@ -26,6 +29,7 @@ print_dot_callback <- callback_lambda(
 )  
 
 df = taksRem %>% select(-contains("_na"))
+
 
 df2 = inner_join(df, grdXwalk, by = 'CAMPUS')
 df2 = subset(df2,select = -c(COUNTY,GRDSPAN))
@@ -179,6 +183,8 @@ data_m$exist56 = ifelse(data_m$CAMPUS %in% name_56,1,0)
 data_m$exist67 = ifelse(data_m$CAMPUS %in% name_67,1,0)
 data_m$exist78 = ifelse(data_m$CAMPUS %in% name_78,1,0)
 
+#data_m = data_m %>% select(-starts_with('pre'))
+
 data_m <- data_m %>%
   mutate(across(everything(), ~ifelse(is.na(.x), 1, 0), .names="mis_{.col}"))
 
@@ -188,7 +194,8 @@ names(data_m) <- make.names(names(data_m))
 data_m[,3:5145] = scale(data_m[,3:5145]) # 3-5145 original covariate
 
 # replace na with 0
-data_m[is.na(data_m)] <- 0 # 1394*10321
+data_m[is.na(data_m)] <- 0 # 1394*10356
+
 
 missing_cols <- data_m %>%
   select(starts_with('mis'))
@@ -200,7 +207,7 @@ check <- missing_colst %>%
 
 col_to_select = rownames(check)
 mis_col= data_m %>% select(col_to_select)
-d = cbind(data_m[,1:5178],mis_col) # 5146 - 5173 are GRDSPAN indicator, 5174-5178 are exist34/45/56...
+d = cbind(data_m[,1:5178],mis_col) # 5146 - 5173 are GRDSPAN indicator, 5174-5178 are exist34/45/56... # 1394 * 6502
 
 
 
@@ -259,7 +266,7 @@ data_h <- data_h %>%
 names(data_h) <- make.names(names(data_h))
 data_h[,3:5145] = scale(data_h[,3:5145])
 # replace na with 0
-data_h[is.na(data_h)] <- 0 # 1474* 10322
+data_h[is.na(data_h)] <- 0 # 1474* 10358
 #data_h[0,]
 
 

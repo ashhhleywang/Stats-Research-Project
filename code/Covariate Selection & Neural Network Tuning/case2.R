@@ -6,7 +6,7 @@ library(randomForest)
 library('fastDummies')
 library(neuralnet)
 library(keras)
-load("../data/remData.Rdata")
+load("../../data/temp/remData.Rdata")
 
 r2_calc <- function(classifications, predictions){
   
