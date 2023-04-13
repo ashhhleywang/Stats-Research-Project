@@ -13,7 +13,7 @@ data/*
 *.Rdata
 
 # images/pdf
-*.pdf
+
 *.HEIC
 
 # User-specific files
